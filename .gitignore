@@ -1,0 +1,4 @@
+Digit Classifier/Data/Test/t10k-images.idx3-ubyte
+Digit Classifier/Data/Test/t10k-labels.idx1-ubyte
+Digit Classifier/Data/Training/train-images.idx3-ubyte
+Digit Classifier/Data/Training/train-labels.idx1-ubyte
