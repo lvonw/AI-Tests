@@ -1,6 +1,9 @@
 import numpy
 import os
 
+BATCH_SIZE = 100
+TRAINING_RATE = 0.5
+
 # === FILE IO ===
 CURRENT_DIR = os.path.dirname(__file__)
 TRAINING_LABELS = "Data/Training/train-labels.idx1-ubyte"
@@ -88,45 +91,47 @@ class MultiLayerPerceptron:
         resActivations = []
         resZs = []
         layerRes = input
+        resActivations.append(vec2Mat(layerRes))
         for i in range (0, self.layers-2):
             # Add results of weights and biases
             layerRes = numpy.dot(self.weights[i], layerRes) + self.biases[i]
-            resZs.append(layerRes)
+            resZs.append(vec2Mat(layerRes))
             # Add Results of non-linearity
             layerRes = reLU(layerRes)
-            resActivations.append(layerRes)
+            resActivations.append(vec2Mat(layerRes))
         
         i = self.layers-2    
         resOutput = softMax(numpy.dot(self.weights[i], layerRes) + self.biases[i])
 
         return (resZs, resActivations, resOutput)
     
-    def train(self, data):
-        for d in data:
-            output = self.forwardPropagation(d)[2]   
-
     def backwardPropagation(self, output, expected, zs, activations):
         resW = []
         resB = []
 
         # dC / dA
-        dz = dLogError(output, expected)
+        dz = vec2Mat(dLogError(output, expected))
         dB = dz
+        
         # dA / dW * dC / dA
-        dW = activations[len(activations)].dot(dz)
+        dW = dz.dot(activations[len(activations)-1].T) 
 
         resW.append(dW)
         resB.append(dB)
 
         for i in range(self.layers-3, -1, -1):
             dr = dReLU (zs[i])
-            dz = self.weights[i+1].dot(dz) * dr
-            dW = activations[i].dot(dz)
-            dB = dz
+            dz = self.weights[i+1].T.dot(dz) * dr
+            dW = dz.dot(activations[i].T)
+            dB = dz.sum(1)
+
             resW.append(dW)
             resB.append(dB)
 
-        return (reversed(resW), reversed(resB))
+        resW.reverse()
+        resB.reverse()
+
+        return (resW, resB)
 
 # === CLASSIFICATION ===
 def classify (nn, img):
@@ -140,6 +145,41 @@ def classify (nn, img):
             res = i
 
     return res
+
+def train(nn):
+    tImages = readImages(getPath(TRAINING_IMAGES))
+    tLabels = readLabels(getPath(TRAINING_LABELS))
+
+    size = tImages.shape[0]
+
+    accW = []
+    accB = []
+
+    layers = nn.layers
+
+    for i in range (0, size):
+        output = nn.forwardPropagation(tImages[i])
+        temp = nn.backwardPropagation(output[2], tLabels[i], output[0], output[1])
+        
+        if not accW: 
+            accW = temp[0]
+            accB = temp[1]
+        else:
+            for j in range(0, layers-1):
+                accW[j] += temp[0][j]
+                accB[j] += temp[1][j]
+
+        if ((i) % BATCH_SIZE) == 0:
+            for j in range(0, layers-2):
+                nn.weights[j] -= (accW[j] / BATCH_SIZE) * TRAINING_RATE 
+                nn.biases[j] += (accB[j] / BATCH_SIZE) * TRAINING_RATE 
+
+            accW = []
+            accB = []
+    return nn
+
+def vec2Mat(vec):
+    return vec.reshape(len(vec), 1)
 
 def test(nn):
     hits    = 0.0
@@ -159,7 +199,8 @@ def test(nn):
     print (f"Hits: {hits}; Misses: {misses}; Ratio: {ratio}")
 
 def main():
-    nn = MultiLayerPerceptron([784,16,10])
+    nn = MultiLayerPerceptron([784,32,16,10])
+    nn = train(nn)
     test(nn)
 
 
